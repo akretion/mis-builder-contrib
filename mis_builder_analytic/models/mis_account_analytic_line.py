@@ -14,7 +14,7 @@ class MisAccountAnalyticLine(models.Model):
         string="Analytic entry", comodel_name="account.analytic.line"
     )
     account_id = fields.Many2one(
-        string="Account", comodel_name="account.analytic.account"
+        string="Account", comodel_name="account.account"
     )
     company_id = fields.Many2one(string="Company", comodel_name="res.company")
     balance = fields.Float(string="Balance")
@@ -24,6 +24,15 @@ class MisAccountAnalyticLine(models.Model):
         [("draft", "Unposted"), ("posted", "Posted")], string="Status"
     )
 
+    @api.multi
+    def action_open_related_line(self):
+        self.ensure_one()
+        if self.line_type == 'move_line':
+            return self.move_line_id.get_formview_action()
+        else:
+            return self.env['account.analytic.line'].browse(
+                self.id).get_formview_action()
+
     @api.model_cr
     def init(self):
         tools.drop_view_if_exists(self._cr, "mis_account_analytic_line")
@@ -31,11 +40,29 @@ class MisAccountAnalyticLine(models.Model):
             """
             CREATE OR REPLACE VIEW mis_account_analytic_line AS (
                 SELECT
+                    -- we use negative id to avoid duplicates and we don't use
+                    -- ROW_NUMBER() because the performance was very poor
+                    -aml.id as id,
+                    CAST('move_line' AS varchar) as line_type,
+                    Null AS analytic_line_id,
+                    aml.date as date,
+                    aml.account_id as account_id,
+                    aml.company_id as company_id,
+                    aml.analytic_account_id as analytic_account_id,
+                    'posted'::VARCHAR as state,
+                    aml.credit as credit,
+                    aml.debit as debit,
+                    aml.balance as balance
+                FROM account_move_line as aml
+                UNION ALL
+                    SELECT
                     aal.id AS id,
+                    CAST('analytic_line' AS varchar) as line_type,
                     aal.id AS analytic_line_id,
                     aal.date as date,
-                    aal.account_id as account_id,
+                    aal.general_account_id as account_id,
                     aal.company_id as company_id,
+                    aal.account_id as analytic_account_id,
                     'posted'::VARCHAR as state,
                     CASE
                       WHEN aal.amount >= 0.0 THEN aal.amount
@@ -48,5 +75,6 @@ class MisAccountAnalyticLine(models.Model):
                     aal.amount as balance
                 FROM
                     account_analytic_line aal
+                WHERE employee_id IS NOT NULL
             )"""
         )
