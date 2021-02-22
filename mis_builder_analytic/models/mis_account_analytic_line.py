@@ -4,6 +4,21 @@
 from odoo import api, fields, models, tools
 
 
+class MisAccountAnalyticLineTagRel(models.Model):
+    _name = 'account.analytic.tag.mis.account.analytic.line.rel'
+    _auto = False
+    _table = 'account_analytic_tag_mis_account_analytic_line_rel'
+
+    account_analytic_tag_id = fields.Many2one(
+        string="Analytic Tag",
+        comodel_name="account.analytic.tag"
+    )
+    mis_account_analytic_line_id = fields.Many2one(
+        string='MIS Analytic Line',
+        comodel_name="mis.account.analytic.line"
+    )
+
+
 class MisAccountAnalyticLine(models.Model):
     _name = "mis.account.analytic.line"
     _auto = False
@@ -48,5 +63,18 @@ class MisAccountAnalyticLine(models.Model):
                     aal.amount as balance
                 FROM
                     account_analytic_line aal
+            )"""
+        )
+
+        tools.drop_view_if_exists(self._cr, "account_analytic_tag_mis_account_analytic_line_rel")
+        self._cr.execute(
+            """
+            CREATE OR REPLACE VIEW account_analytic_tag_mis_account_analytic_line_rel AS (
+                SELECT
+                    mis.id as mis_account_analytic_line_id,
+                    tag_id as account_analytic_tag_id
+                FROM mis_account_analytic_line as mis
+                JOIN account_analytic_line_tag_rel as rel
+                    ON mis.id=line_id
             )"""
         )
